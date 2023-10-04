@@ -1,39 +1,36 @@
-import sha1 from 'sha1';
-import DBClient from '../utils/db';
-import RedisClient from '../utils/redis';
+const dbClient = require('../utils/db');
+const sha1Hash = require('../utils/sha1');
+const { getUserBySessionToken } = require('./AuthController');
 
-const { ObjectId } = require('mongodb');
+async function postNew(req, res) {
+  const { email } = req.body;
+  const { password } = req.body;
 
-class UsersController {
-  static async postNew (request, response) {
-    const userEmail = request.body.email;
-    if (!userEmail) return response.status(400).send({ error: 'Missing email' });
+  if (!email) return res.status(400).send({ error: 'Missing email' });
+  if (!password) return res.status(400).send({ error: 'Missing password' });
 
-    const userPassword = request.body.password;
-    if (!userPassword) return response.status(400).send({ error: 'Missing password' });
+  const emailExists = await dbClient.findOne('users', { email });
+  if (emailExists) return res.status(400).send({ error: 'Already exist' });
 
-    const oldUserEmail = await DBClient.db.collection('users').findOne({ email: userEmail });
-    if (oldUserEmail) return response.status(400).send({ error: 'Already exist' });
+  const hashedPasswd = sha1Hash(password);
+  const user = await dbClient.save('users', { email, password: hashedPasswd });
 
-    const shaUserPassword = sha1(userPassword);
-    const result = await DBClient.db.collection('users').insertOne({ email: userEmail, password: shaUserPassword });
+  const returnUser = {
+    id: user.ops[0]._id,
+    email: user.ops[0].email,
+  };
 
-    return response.status(201).send({ id: result.insertedId, email: userEmail });
-  }
-
-  static async getMe (request, response) {
-    const token = request.header('X-Token') || null;
-    if (!token) return response.status(401).send({ error: 'Unauthorized' });
-
-    const redisToken = await RedisClient.get(`auth_${token}`);
-    if (!redisToken) return response.status(401).send({ error: 'Unauthorized' });
-
-    const user = await DBClient.db.collection('users').findOne({ _id: ObjectId(redisToken) });
-    if (!user) return response.status(401).send({ error: 'Unauthorized' });
-    delete user.password;
-
-    return response.status(200).send({ id: user._id, email: user.email });
-  }
+  return res.status(201).send(returnUser);
 }
 
-module.exports = UsersController;
+const getMe = async (req, res) => {
+  const sessionToken = req.header('X-Token');
+
+  const user = await getUserBySessionToken(sessionToken);
+
+  if (!user) return res.status(401).send({ error: 'Unauthorized' });
+
+  return res.status(200).send({ id: user._id, email: user.email });
+};
+
+module.exports = { postNew, getMe };
