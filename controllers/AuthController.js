@@ -1,48 +1,20 @@
-const { v4 } = require('uuid');
-const sha1 = require('sha1');
-const dbClient = require('../utils/db');
-const redisClient = require('../utils/redis');
+/* eslint-disable import/no-named-as-default */
+import { v4 as uuidv4 } from 'uuid';
+import redisClient from '../utils/redis';
 
-class AuthController {
-  static async getConnect(request, response) {
-    const header = request.header('Authorization');
-    if (!header || !header.startsWith('Basic ')) {
-      return response.status(401).json({ error: 'Unauthorized' });
-    }
-    const credentials = Buffer.from(header.slice('Basic '.length), 'base64').toString('utf-8');
-    const [email, password] = credentials.split(':');
+export default class AuthController {
+  static async getConnect(req, res) {
+    const { user } = req;
+    const token = uuidv4();
 
-    if (!email || !password) {
-      return response.status(401).json({ error: 'Unauthorized' });
-    }
-    const hashedPassword = sha1(password);
-    const db = dbClient.client.db(process.env.DB_DATABASE);
-    const users = db.collection('users');
-    const user = await users.findOne({ email, hashedPassword });
-
-    if (!user) {
-      return response.status(401).json({ error: 'Unauthorized' });
-    }
-    const token = v4();
-    const key = `auth_${token}`;
-
-    await redisClient.set(key, user._id.toString(), 86400);
-    return response.status(200).json({ token });
+    await redisClient.set(`auth_${token}`, user._id.toString(), 24 * 60 * 60);
+    res.status(200).json({ token });
   }
 
-  static async getDisconnect(request, response) {
-    const token = request.header('X-Token');
-    if (!token) {
-      return response.status(401).json({ error: 'Unauthorized' });
-    }
-    const key = `auth_${token}`;
-    const userId = await redisClient.get(key);
-    if (!userId) {
-      return response.status(401).json({ error: 'Unauthorized' });
-    }
-    redisClient.del(key);
-    return response.status(204).end();
+  static async getDisconnect(req, res) {
+    const token = req.headers['x-token'];
+
+    await redisClient.del(`auth_${token}`);
+    res.status(204).send();
   }
 }
-
-module.exports = AuthController;
