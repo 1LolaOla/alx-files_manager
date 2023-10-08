@@ -26,7 +26,7 @@ describe('+ AppController', () => {
     });
   });
 
-  describe('+ GET: /status', () => {
+  describe('+ GET: /stats', () => {
     it('+ Correct statistics about db collections', function (done) {
       request.get('/stats')
         .expect(200)
@@ -39,7 +39,7 @@ describe('+ AppController', () => {
         });
     });
 
-    it('+ Correct statistics about database collections [alt]', function (done) {
+    it('+ Correct statistics about db collections [alt]', function (done) {
       this.timeout(10000);
       Promise.all([dbClient.usersCollection(), dbClient.filesCollection()])
         .then(([usersCollection, filesCollection]) => {
